@@ -8,6 +8,8 @@ import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 import java.math.BigDecimal
+import java.math.BigDecimal.TEN
+import java.math.BigDecimal.ZERO
 
 @RestController
 @RequestMapping("/v1/products/")
@@ -24,25 +26,25 @@ class ProductController(
 
 @Service
 class ProductService(
-  private val productRepository: ProductsIntegration,
+  private val productRepository: ProductRepository,
   private val discountCalculatorIntegration: DiscountCalculatorIntegration
 ) {
   
-  fun list(userId: String) = productRepository.ids().map {
-    discountCalculatorIntegration.calculate(it, userId)
+  fun list(userId: String) = productRepository.findAll().map {
+      it.withDiscount(discountCalculatorIntegration.discount(it.id, userId))
   }
   
 }
 
-interface ProductsIntegration {
+interface ProductRepository {
   
-  fun ids(): List<String>
+  fun findAll(): List<Product>
   
 }
 
 interface DiscountCalculatorIntegration {
   
-  fun calculate(productId: String, userId: String): Product
+  fun discount(productId: String, userId: String): ProductDiscount
   
 }
 
@@ -50,54 +52,56 @@ data class Product(
   val id: String,
   val price: Int,
   val title: String,
-  val description: String,
-  val discount: ProductDiscount
+  val description: String
 )
 
 data class ProductDiscount(
-  val pct: BigDecimal,
-  val value: Int
+  val pct: BigDecimal = ZERO,
+  val value: Int = 0
+)
+
+data class ProductWithDiscount(
+  val product: Product,
+  val discount: ProductDiscount
+)
+
+fun Product.withDiscount(discount: ProductDiscount) = ProductWithDiscount(
+  product = this,
+  discount = discount
 )
 
 @Component
-class ProductsInMemoryIntegration : ProductsIntegration {
-  
-  private val productsIds = listOf(
-    "c8276ce4-fc4e-11ea-a47c-23fcf1c286e9", "d9730c1a-fc4e-11ea-b1ec-9b7e662ad50a"
-  )
-  
-  override fun ids() = productsIds
-  
-}
-
-@Component
-class DiscountCalculatorInMemoryIntegration : DiscountCalculatorIntegration {
+class ProductInMemoryRepository : ProductRepository {
   
   val products = listOf(
     Product(
       id = "c8276ce4-fc4e-11ea-a47c-23fcf1c286e9",
       price = 1499,
       title = "Broca Gedore Madeira 6mm",
-      description = "Broca para madeira 6mm",
-      discount = ProductDiscount(
-        pct = BigDecimal.ZERO,
-        value = 0
-      )
+      description = "Broca para madeira 6mm"
     ),
     Product(
-      id = "c8276ce4-fc4e-11ea-a47c-23fcf1c286e9",
-      price = 1499,
-      title = "Broca Gedore Madeira 6mm",
-      description = "Broca para madeira 6mm",
-      discount = ProductDiscount(
-        pct = BigDecimal.ZERO,
-        value = 0
-      )
-    ),
+      id = "7cb8eee8-fcb4-11ea-af34-9f307f7fa81a",
+      price = 9999,
+      title = "Parafuso + Bucha 6mm - PCT 30",
+      description = "Pacote com 30 parafusos e 30 buchas 6mm"
+    )
   )
   
-  override fun calculate(productId: String, userId: String): Product {
+  override fun findAll() = products
   
-  }
+}
+
+@Component
+class DiscountCalculatorInMemoryIntegration : DiscountCalculatorIntegration {
+  
+  val discounts = mapOf(
+    "c8276ce4-fc4e-11ea-a47c-23fcf1c286e9" to ProductDiscount(TEN, 149),
+    "7cb8eee8-fcb4-11ea-af34-9f307f7fa81a" to ProductDiscount(BigDecimal.valueOf(5), 99)
+  )
+  
+  val empty = ProductDiscount()
+  
+  override fun discount(productId: String, userId: String) = discounts[productId] ?: empty
   
 }
